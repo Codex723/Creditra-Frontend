@@ -1,6 +1,6 @@
 import { CreditLine } from "@/types/draw-credit.types";
-import { AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
+import { FormMessage } from "@/components/FormMessage";
 
 interface AmountInputProps {
   creditLine: CreditLine;
@@ -17,19 +17,26 @@ export function AmountInput({
 }: AmountInputProps) {
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
+  const amountInputId = "draw-credit-amount";
+  const amountErrorId = `${amountInputId}-error`;
+  const hasEnteredAmount = amount.trim() !== "";
 
   useEffect(() => {
     const numAmount = parseFloat(amount) || 0;
     onAmountChange(numAmount);
 
-    if (numAmount > 0 && numAmount <= creditLine.available) {
+    if (!hasEnteredAmount) {
+      setError("");
+    } else if (numAmount <= 0) {
+      setError("Enter an amount greater than $0.");
+    } else if (numAmount > 0 && numAmount <= creditLine.available) {
       setError("");
     } else if (numAmount > creditLine.available) {
       setError(`Maximum available: $${creditLine.available.toLocaleString()}`);
-    } else if (numAmount > 0) {
+    } else {
       setError("");
     }
-  }, [amount, creditLine.available, onAmountChange]);
+  }, [amount, creditLine.available, hasEnteredAmount, onAmountChange]);
 
   const handlePreset = (percent: number) => {
     const preset = Math.floor((creditLine.available * percent) / 100);
@@ -38,6 +45,7 @@ export function AmountInput({
 
   const numAmount = parseFloat(amount) || 0;
   const isValid = numAmount > 0 && numAmount <= creditLine.available;
+  const remaining = Math.max(creditLine.available - numAmount, 0);
 
   return (
     <div className="space-y-8">
@@ -46,12 +54,25 @@ export function AmountInput({
         <p className="text-muted mt-2">{creditLine.name}</p>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 bg-surface p-4 rounded-xl border-2 border-border overflow-hidden">
+      <div className="form-field">
+        <label htmlFor={amountInputId} className="sr-only">
+          Amount to draw
+        </label>
+        <div
+          className="flex items-center gap-2 bg-surface p-4 rounded-xl border-2 overflow-hidden transition-colors"
+          style={{
+            borderColor: error
+              ? "rgba(248, 81, 73, 0.5)"
+              : isValid
+                ? "rgba(96, 165, 250, 0.6)"
+                : undefined,
+          }}
+        >
           <span className="text-3xl font-bold text-foreground flex-shrink-0">
             $
           </span>
           <input
+            id={amountInputId}
             type="number"
             placeholder="0"
             value={amount}
@@ -59,14 +80,11 @@ export function AmountInput({
             className="text-2xl font-bold bg-transparent outline-none flex-1 text-foreground placeholder:text-muted/50 min-w-0"
             min="0"
             max={creditLine.available}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? amountErrorId : undefined}
           />
         </div>
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-lg border border-destructive/30">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {error}
-          </div>
-        )}
+        <FormMessage id={amountErrorId} message={error} reserveSpace />
       </div>
 
       <div>
@@ -102,7 +120,7 @@ export function AmountInput({
         <div className="flex justify-between text-sm border-t border-border pt-3">
           <span className="text-muted">Remaining:</span>
           <span className="font-semibold text-foreground">
-            ${(creditLine.available - numAmount).toLocaleString()}
+            ${remaining.toLocaleString()}
           </span>
         </div>
       </div>

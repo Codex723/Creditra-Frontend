@@ -4,6 +4,7 @@ import { CreditLines } from "./pages/CreditLines";
 import { WalletProvider } from "./context/WalletContext";
 import { WalletButton } from "./components/WalletButton";
 import DrawCreditPage from "./pages/DrawCreditPage";
+import { RequestEvaluation } from "./pages/RequestEvaluation";
 
 function App() {
   return (
