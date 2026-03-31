@@ -1,373 +1,219 @@
-import { useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { RepayModal } from '../components/RepayModal';
 import { MOCK_CREDIT_LINES } from '../data/mockData';
-import type {
-  CreditLine,
-  CreditLineStatus,
-  SortDirection,
-  SortField,
-} from '../types/creditLine';
+import type { CreditLineStatus, SortField, SortDirection } from '../types/creditLine';
 import {
-  COLOR,
-  RISK_COLOR,
-  STATUS_COLOR,
-  btn,
-  fmt,
-  fmtDateTime,
-  getUtilizationLevel,
-  utilizationPct,
+  COLOR, UTIL_COLOR, STATUS_COLOR,
+  fmt, fmtDate, getUtilizationLevel, utilizationPct,
 } from '../utils/tokens';
+import './CreditLines.css';
 
-const FILTERS: Array<CreditLineStatus | 'All'> = [
-  'All',
-  'Active',
-  'Suspended',
-  'Defaulted',
-  'Closed',
-];
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 
-export function CreditLines() {
-  const [statusFilter, setStatusFilter] = useState<CreditLineStatus | 'All'>('All');
-  const [sortField, setSortField] = useState<SortField>('updatedAt');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [repayTarget, setRepayTarget] = useState<CreditLine | null>(null);
-  const [walletBalance, setWalletBalance] = useState(250000);
-
-  const filteredLines = useMemo(() => {
-    const visibleLines =
-      statusFilter === 'All'
-        ? MOCK_CREDIT_LINES
-        : MOCK_CREDIT_LINES.filter((line) => line.status === statusFilter);
-
-    const sortedLines = [...visibleLines].sort((a, b) => {
-      const direction = sortDirection === 'asc' ? 1 : -1;
-
-      switch (sortField) {
-        case 'status':
-          return a.status.localeCompare(b.status) * direction;
-        case 'limit':
-          return (a.limit - b.limit) * direction;
-        case 'utilization':
-          return (utilizationPct(a.utilized, a.limit) - utilizationPct(b.utilized, b.limit)) * direction;
-        case 'apr':
-          return (a.apr - b.apr) * direction;
-        case 'riskScore':
-          return (a.riskScore - b.riskScore) * direction;
-        case 'updatedAt':
-        default:
-          return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * direction;
-      }
-    });
-
-    return sortedLines;
-  }, [sortDirection, sortField, statusFilter]);
-
-  const totalLimit = filteredLines.reduce((sum, line) => sum + line.limit, 0);
-  const totalUtilized = filteredLines.reduce((sum, line) => sum + line.utilized, 0);
-  const totalAvailable = totalLimit - totalUtilized;
-
-  const handleRepaySuccess = (amount: number) => {
-    setWalletBalance((current) => Math.max(current - amount, 0));
-    setRepayTarget(null);
-  };
-
+function StatusBadge({ status }: { status: CreditLineStatus }) {
+  const { bg, color } = STATUS_COLOR[status];
   return (
-    <>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: '1rem',
-          flexWrap: 'wrap',
-          marginBottom: '1.25rem',
-        }}
-      >
-        <div>
-          <h1 style={{ margin: '0 0 0.3rem', fontSize: '1.5rem', fontWeight: 700, color: COLOR.text }}>
-            Credit Lines
-          </h1>
-          <p style={{ margin: 0, color: COLOR.muted }}>
-            Review active facilities, track utilization, and launch draw or repay actions.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <Link to="/draw-credit" style={{ ...btn.draw, textDecoration: 'none' }}>
-            Draw Credit
-          </Link>
-          <Link to="/open-credit" style={{ ...btn.primary, textDecoration: 'none' }}>
-            Open Credit Line
-          </Link>
-        </div>
-      </div>
-
-      <div
-        className="card"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '1rem',
-        }}
-      >
-        <div>
-          <p style={{ marginBottom: '0.35rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Total Limit
-          </p>
-          <p style={{ margin: 0, color: COLOR.text, fontSize: '1.4rem', fontWeight: 700 }}>{fmt(totalLimit)}</p>
-        </div>
-        <div>
-          <p style={{ marginBottom: '0.35rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Utilized
-          </p>
-          <p style={{ margin: 0, color: COLOR.warning, fontSize: '1.4rem', fontWeight: 700 }}>{fmt(totalUtilized)}</p>
-        </div>
-        <div>
-          <p style={{ marginBottom: '0.35rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Available
-          </p>
-          <p style={{ margin: 0, color: COLOR.success, fontSize: '1.4rem', fontWeight: 700 }}>{fmt(totalAvailable)}</p>
-        </div>
-        <div>
-          <p style={{ marginBottom: '0.35rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Wallet Balance
-          </p>
-          <p style={{ margin: 0, color: COLOR.text, fontSize: '1.4rem', fontWeight: 700 }}>{fmt(walletBalance)}</p>
-        </div>
-      </div>
-
-      <div
-        className="card"
-        style={{
-          display: 'flex',
-          gap: '0.75rem',
-          alignItems: 'end',
-          flexWrap: 'wrap',
-        }}
-      >
-        <label className="form-field" style={{ minWidth: 180 }}>
-          <span className="form-field__hint">Status</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as CreditLineStatus | 'All')}
-            style={{
-              background: COLOR.bg,
-              border: `1px solid ${COLOR.border}`,
-              color: COLOR.text,
-              borderRadius: 8,
-              padding: '0.65rem 0.75rem',
-            }}
-          >
-            {FILTERS.map((filter) => (
-              <option key={filter} value={filter}>
-                {filter}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="form-field" style={{ minWidth: 180 }}>
-          <span className="form-field__hint">Sort By</span>
-          <select
-            value={sortField}
-            onChange={(e) => setSortField(e.target.value as SortField)}
-            style={{
-              background: COLOR.bg,
-              border: `1px solid ${COLOR.border}`,
-              color: COLOR.text,
-              borderRadius: 8,
-              padding: '0.65rem 0.75rem',
-            }}
-          >
-            <option value="updatedAt">Last Updated</option>
-            <option value="limit">Limit</option>
-            <option value="utilization">Utilization</option>
-            <option value="apr">APR</option>
-            <option value="riskScore">Risk Score</option>
-            <option value="status">Status</option>
-          </select>
-        </label>
-
-        <button
-          onClick={() =>
-            setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-          }
-          style={{ ...btn.secondary, minWidth: 140 }}
-        >
-          {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-        </button>
-      </div>
-
-      <div style={{ display: 'grid', gap: '1rem' }}>
-        {filteredLines.map((line) => {
-          const statusTone = STATUS_COLOR[line.status];
-          const utilization = utilizationPct(line.utilized, line.limit);
-          const utilizationLevel = getUtilizationLevel(line.utilized, line.limit);
-
-          return (
-            <div key={line.id} className="card" style={{ marginBottom: 0 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: '1rem',
-                  flexWrap: 'wrap',
-                  marginBottom: '1rem',
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <h2 style={{ margin: 0, color: COLOR.text }}>{line.name}</h2>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        padding: '0.25rem 0.6rem',
-                        borderRadius: 999,
-                        background: statusTone.bg,
-                        color: statusTone.color,
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          background: statusTone.color,
-                        }}
-                      />
-                      {line.status}
-                    </span>
-                  </div>
-                  <p style={{ margin: '0.35rem 0 0', color: COLOR.muted }}>
-                    {line.id} · Updated {fmtDateTime(line.updatedAt)}
-                  </p>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <Link to="/draw-credit" style={{ ...btn.draw, textDecoration: 'none' }}>
-                    Draw
-                  </Link>
-                  <button
-                    onClick={() => setRepayTarget(line)}
-                    disabled={line.utilized <= 0}
-                    style={{
-                      ...btn.repay,
-                      opacity: line.utilized <= 0 ? 0.5 : 1,
-                      cursor: line.utilized <= 0 ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Repay
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                  gap: '0.85rem',
-                  marginBottom: '1rem',
-                }}
-              >
-                <Metric label="Limit" value={fmt(line.limit)} tone={COLOR.accent} />
-                <Metric label="Utilized" value={fmt(line.utilized)} tone={COLOR.warning} />
-                <Metric label="APR" value={`${line.apr.toFixed(2)}%`} tone={COLOR.text} />
-                <Metric label="Risk Score" value={String(line.riskScore)} tone={RISK_COLOR(line.riskScore)} />
-              </div>
-
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
-                  <span style={{ color: COLOR.muted, fontSize: '0.85rem' }}>Utilization</span>
-                  <span style={{ color: COLOR.text, fontSize: '0.85rem', fontWeight: 600 }}>
-                    {utilization}%
-                  </span>
-                </div>
-                <div style={{ height: 10, borderRadius: 999, background: COLOR.border, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${utilization}%`,
-                      height: '100%',
-                      background:
-                        utilizationLevel === 'low'
-                          ? COLOR.success
-                          : utilizationLevel === 'medium'
-                            ? COLOR.warning
-                            : COLOR.danger,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                  gap: '0.75rem',
-                  color: COLOR.muted,
-                  fontSize: '0.85rem',
-                }}
-              >
-                <span>Opened: {fmtDateTime(line.openedAt)}</span>
-                <span>Collateral: {line.collateral ?? 'Unsecured'}</span>
-                <span>
-                  Next Payment:{' '}
-                  {line.nextPaymentDate && line.nextPaymentAmount
-                    ? `${fmt(line.nextPaymentAmount)} on ${fmtDateTime(line.nextPaymentDate)}`
-                    : 'No upcoming payment'}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {repayTarget ? (
-        <RepayModal
-          creditLine={repayTarget}
-          walletBalance={walletBalance}
-          onClose={() => setRepayTarget(null)}
-          onSuccess={handleRepaySuccess}
-        />
-      ) : null}
-    </>
+    <span className="cl-status-badge" style={{ background: bg, color }}>
+      <span className="dot" style={{ background: color }} />
+      {status}
+    </span>
   );
 }
 
-function Metric({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: string;
-}) {
+// ─── Credit Line Card ────────────────────────────────────────────────────────
+
+function CreditLineCard({ line }: { line: typeof MOCK_CREDIT_LINES[0] }) {
+  const pct = utilizationPct(line.utilized, line.limit);
+  const level = getUtilizationLevel(line.utilized, line.limit);
+
   return (
-    <div
-      style={{
-        padding: '0.9rem 1rem',
-        background: COLOR.bg,
-        border: `1px solid ${COLOR.border}`,
-        borderRadius: 10,
-      }}
-    >
-      <p
-        style={{
-          margin: '0 0 0.35rem',
-          color: COLOR.muted,
-          fontSize: '0.75rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-        }}
-      >
-        {label}
-      </p>
-      <p style={{ margin: 0, color: tone, fontSize: '1.1rem', fontWeight: 700 }}>{value}</p>
+    <div className="cl-card">
+      <div className="cl-card-header">
+        <div>
+          <h3 className="cl-name">{line.name}</h3>
+          <p className="cl-id">{line.id}</p>
+        </div>
+        <StatusBadge status={line.status} />
+      </div>
+
+      <div className="cl-card-body">
+        <div className="cl-metrics">
+          <div className="cl-metric">
+            <span className="cl-metric-label">Limit</span>
+            <span className="cl-metric-value" style={{ color: COLOR.accent }}>{fmt(line.limit)}</span>
+          </div>
+          <div className="cl-metric">
+            <span className="cl-metric-label">Utilized</span>
+            <span className="cl-metric-value" style={{ color: UTIL_COLOR[level] }}>{fmt(line.utilized)}</span>
+          </div>
+          <div className="cl-metric">
+            <span className="cl-metric-label">Available</span>
+            <span className="cl-metric-value" style={{ color: COLOR.success }}>{fmt(line.limit - line.utilized)}</span>
+          </div>
+        </div>
+
+        <div className="cl-util-bar">
+          <div className="cl-util-header">
+            <span>Utilization</span>
+            <span style={{ color: UTIL_COLOR[level] }}>{pct}%</span>
+          </div>
+          <div className="cl-util-track">
+            <div className="cl-util-fill" style={{ width: `${pct}%`, background: UTIL_COLOR[level] }} />
+          </div>
+        </div>
+
+        <div className="cl-details">
+          <div className="cl-detail">
+            <span className="label">APR</span>
+            <span className="value">{line.apr}%</span>
+          </div>
+          <div className="cl-detail">
+            <span className="label">Risk Score</span>
+            <span className="value">{line.riskScore}</span>
+          </div>
+          <div className="cl-detail">
+            <span className="label">Opened</span>
+            <span className="value">{fmtDate(line.openedAt)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="cl-card-footer">
+        {line.status === 'Active' && line.limit > line.utilized && (
+          <Link to={`/draw-credit?line=${line.id}`} className="cl-action-btn draw">
+            ↗ Draw
+          </Link>
+        )}
+        {line.utilized > 0 && (
+          <button className="cl-action-btn repay">↙ Repay</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
+export default function CreditLines() {
+  const [sortField, setSortField] = useState<SortField>('updatedAt');
+  const [sortDir, setSortDir] = useState<SortDirection>('desc');
+  const [statusFilter, setStatusFilter] = useState<CreditLineStatus | 'all'>('all');
+
+  const creditLines = MOCK_CREDIT_LINES;
+
+  const filteredAndSorted = useMemo(() => {
+    let filtered = statusFilter === 'all'
+      ? creditLines
+      : creditLines.filter(cl => cl.status === statusFilter);
+
+    return [...filtered].sort((a, b) => {
+      let aVal: number | string = 0;
+      let bVal: number | string = 0;
+
+      switch (sortField) {
+        case 'status':
+          aVal = a.status;
+          bVal = b.status;
+          break;
+        case 'limit':
+          aVal = a.limit;
+          bVal = b.limit;
+          break;
+        case 'utilization':
+          aVal = a.utilized / a.limit;
+          bVal = b.utilized / b.limit;
+          break;
+        case 'updatedAt':
+          aVal = new Date(a.updatedAt).getTime();
+          bVal = new Date(b.updatedAt).getTime();
+          break;
+        case 'apr':
+          aVal = a.apr;
+          bVal = b.apr;
+          break;
+        case 'riskScore':
+          aVal = a.riskScore;
+          bVal = b.riskScore;
+          break;
+      }
+
+      if (typeof aVal === 'string') {
+        return sortDir === 'asc'
+          ? aVal.localeCompare(bVal as string)
+          : (bVal as string).localeCompare(aVal);
+      }
+
+      return sortDir === 'asc' ? aVal - (bVal as number) : (bVal as number) - aVal;
+    });
+  }, [creditLines, sortField, sortDir, statusFilter]);
+
+  const handleSort = (field: SortField) => {
+    if (field === sortField) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
+
+  return (
+    <div className="credit-lines-page">
+      <div className="cl-page-header">
+        <div>
+          <h1>Credit Lines</h1>
+          <p className="subtitle">Manage your credit facilities</p>
+        </div>
+        <Link to="/open-credit" className="cl-primary-btn">
+          + Open New Line
+        </Link>
+      </div>
+
+      <div className="cl-filters">
+        <div className="cl-filter-group">
+          <label>Status</label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as CreditLineStatus | 'all')}>
+            <option value="all">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Suspended">Suspended</option>
+            <option value="Defaulted">Defaulted</option>
+            <option value="Closed">Closed</option>
+          </select>
+        </div>
+        <div className="cl-filter-group">
+          <label>Sort By</label>
+          <select value={sortField} onChange={(e) => handleSort(e.target.value as SortField)}>
+            <option value="updatedAt">Last Updated</option>
+            <option value="status">Status</option>
+            <option value="limit">Credit Limit</option>
+            <option value="utilization">Utilization</option>
+            <option value="apr">APR</option>
+            <option value="riskScore">Risk Score</option>
+          </select>
+        </div>
+        <button
+          className="cl-sort-dir"
+          onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+        >
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </button>
+      </div>
+
+      {filteredAndSorted.length === 0 ? (
+        <div className="cl-empty">
+          <div className="cl-empty-icon">💳</div>
+          <h3>No credit lines found</h3>
+          <p>Apply for a credit line to get started</p>
+          <Link to="/open-credit" className="cl-primary-btn">
+            Open Credit Line
+          </Link>
+        </div>
+      ) : (
+        <div className="cl-grid">
+          {filteredAndSorted.map(line => (
+            <CreditLineCard key={line.id} line={line} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
