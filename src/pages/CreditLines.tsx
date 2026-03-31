@@ -1,246 +1,219 @@
-import { useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { RepayModal } from '../components/RepayModal';
-
-import type {
-  CreditLine,
-  CreditLineStatus,
-  SortDirection,
-  SortField,
-} from '../types/creditLine';
-
 import { MOCK_CREDIT_LINES } from '../data/mockData';
-
+import type { CreditLineStatus, SortField, SortDirection } from '../types/creditLine';
 import {
-  COLOR,
-  STATUS_COLOR,
-  RISK_COLOR,
-  btn,
-  fmt,
-  fmtDate,
-  fmtDateTime,
-  getUtilizationLevel,
-  utilizationPct,
+  COLOR, UTIL_COLOR, STATUS_COLOR,
+  fmt, fmtDate, getUtilizationLevel, utilizationPct,
 } from '../utils/tokens';
+import './CreditLines.css';
 
-const statusOrder: CreditLineStatus[] = ['Active', 'Suspended', 'Defaulted', 'Closed'];
-const walletBalance = 250000;
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 
-function sortCreditLines(lines: CreditLine[], field: SortField, direction: SortDirection) {
-  const sorted = [...lines].sort((a, b) => {
-    switch (field) {
-      case 'status':
-        return statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status);
-      case 'limit':
-        return a.limit - b.limit;
-      case 'utilization':
-        return utilizationPct(a.utilized, a.limit) - utilizationPct(b.utilized, b.limit);
-      case 'updatedAt':
-        return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-      case 'apr':
-        return a.apr - b.apr;
-      case 'riskScore':
-        return a.riskScore - b.riskScore;
-    }
-  });
-
-  return direction === 'asc' ? sorted : sorted.reverse();
+function StatusBadge({ status }: { status: CreditLineStatus }) {
+  const { bg, color } = STATUS_COLOR[status];
+  return (
+    <span className="cl-status-badge" style={{ background: bg, color }}>
+      <span className="dot" style={{ background: color }} />
+      {status}
+    </span>
+  );
 }
 
-export function CreditLines() {
-  const [creditLines, setCreditLines] = useState(MOCK_CREDIT_LINES);
-  const [statusFilter, setStatusFilter] = useState<CreditLineStatus | 'All'>('All');
+// ─── Credit Line Card ────────────────────────────────────────────────────────
+
+function CreditLineCard({ line }: { line: typeof MOCK_CREDIT_LINES[0] }) {
+  const pct = utilizationPct(line.utilized, line.limit);
+  const level = getUtilizationLevel(line.utilized, line.limit);
+
+  return (
+    <div className="cl-card">
+      <div className="cl-card-header">
+        <div>
+          <h3 className="cl-name">{line.name}</h3>
+          <p className="cl-id">{line.id}</p>
+        </div>
+        <StatusBadge status={line.status} />
+      </div>
+
+      <div className="cl-card-body">
+        <div className="cl-metrics">
+          <div className="cl-metric">
+            <span className="cl-metric-label">Limit</span>
+            <span className="cl-metric-value" style={{ color: COLOR.accent }}>{fmt(line.limit)}</span>
+          </div>
+          <div className="cl-metric">
+            <span className="cl-metric-label">Utilized</span>
+            <span className="cl-metric-value" style={{ color: UTIL_COLOR[level] }}>{fmt(line.utilized)}</span>
+          </div>
+          <div className="cl-metric">
+            <span className="cl-metric-label">Available</span>
+            <span className="cl-metric-value" style={{ color: COLOR.success }}>{fmt(line.limit - line.utilized)}</span>
+          </div>
+        </div>
+
+        <div className="cl-util-bar">
+          <div className="cl-util-header">
+            <span>Utilization</span>
+            <span style={{ color: UTIL_COLOR[level] }}>{pct}%</span>
+          </div>
+          <div className="cl-util-track">
+            <div className="cl-util-fill" style={{ width: `${pct}%`, background: UTIL_COLOR[level] }} />
+          </div>
+        </div>
+
+        <div className="cl-details">
+          <div className="cl-detail">
+            <span className="label">APR</span>
+            <span className="value">{line.apr}%</span>
+          </div>
+          <div className="cl-detail">
+            <span className="label">Risk Score</span>
+            <span className="value">{line.riskScore}</span>
+          </div>
+          <div className="cl-detail">
+            <span className="label">Opened</span>
+            <span className="value">{fmtDate(line.openedAt)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="cl-card-footer">
+        {line.status === 'Active' && line.limit > line.utilized && (
+          <Link to={`/draw-credit?line=${line.id}`} className="cl-action-btn draw">
+            ↗ Draw
+          </Link>
+        )}
+        {line.utilized > 0 && (
+          <button className="cl-action-btn repay">↙ Repay</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
+export default function CreditLines() {
   const [sortField, setSortField] = useState<SortField>('updatedAt');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [selectedLine, setSelectedLine] = useState<CreditLine | null>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>('desc');
+  const [statusFilter, setStatusFilter] = useState<CreditLineStatus | 'all'>('all');
 
-  const filteredLines = useMemo(() => {
-    const visibleLines = statusFilter === 'All'
+  const creditLines = MOCK_CREDIT_LINES;
+
+  const filteredAndSorted = useMemo(() => {
+    let filtered = statusFilter === 'all'
       ? creditLines
-      : creditLines.filter((line) => line.status === statusFilter);
+      : creditLines.filter(cl => cl.status === statusFilter);
 
-    return sortCreditLines(visibleLines, sortField, sortDirection);
-  }, [creditLines, sortDirection, sortField, statusFilter]);
+    return [...filtered].sort((a, b) => {
+      let aVal: number | string = 0;
+      let bVal: number | string = 0;
 
-  const activeExposure = useMemo(
-    () => creditLines.filter((line) => line.status === 'Active').reduce((sum, line) => sum + line.utilized, 0),
-    [creditLines]
-  );
+      switch (sortField) {
+        case 'status':
+          aVal = a.status;
+          bVal = b.status;
+          break;
+        case 'limit':
+          aVal = a.limit;
+          bVal = b.limit;
+          break;
+        case 'utilization':
+          aVal = a.utilized / a.limit;
+          bVal = b.utilized / b.limit;
+          break;
+        case 'updatedAt':
+          aVal = new Date(a.updatedAt).getTime();
+          bVal = new Date(b.updatedAt).getTime();
+          break;
+        case 'apr':
+          aVal = a.apr;
+          bVal = b.apr;
+          break;
+        case 'riskScore':
+          aVal = a.riskScore;
+          bVal = b.riskScore;
+          break;
+      }
 
-  const totalLimit = useMemo(
-    () => creditLines.filter((line) => line.status !== 'Closed').reduce((sum, line) => sum + line.limit, 0),
-    [creditLines]
-  );
+      if (typeof aVal === 'string') {
+        return sortDir === 'asc'
+          ? aVal.localeCompare(bVal as string)
+          : (bVal as string).localeCompare(aVal);
+      }
+
+      return sortDir === 'asc' ? aVal - (bVal as number) : (bVal as number) - aVal;
+    });
+  }, [creditLines, sortField, sortDir, statusFilter]);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-      return;
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
     }
-
-    setSortField(field);
-    setSortDirection(field === 'status' ? 'asc' : 'desc');
-  };
-
-  const handleRepaySuccess = (amount: number) => {
-    if (!selectedLine) return;
-
-    setCreditLines((current) =>
-      current.map((line) =>
-        line.id === selectedLine.id
-          ? {
-              ...line,
-              utilized: Math.max(0, line.utilized - amount),
-              updatedAt: new Date().toISOString(),
-            }
-          : line
-      )
-    );
-    setSelectedLine(null);
   };
 
   return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+    <div className="credit-lines-page">
+      <div className="cl-page-header">
         <div>
-          <h1 style={{ margin: '0 0 0.35rem', color: COLOR.text, fontSize: '1.6rem' }}>Credit Lines</h1>
-          <p style={{ margin: 0, color: COLOR.muted, maxWidth: 640 }}>
-            Monitor utilization, risk, and repayment activity across every line in one place.
-          </p>
+          <h1>Credit Lines</h1>
+          <p className="subtitle">Manage your credit facilities</p>
         </div>
-        <Link to="/open-credit" style={{ ...btn.primary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-          Open Credit Line
+        <Link to="/open-credit" className="cl-primary-btn">
+          + Open New Line
         </Link>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-        {[
-          { label: 'Open Lines', value: String(creditLines.filter((line) => line.status !== 'Closed').length), tone: COLOR.accent },
-          { label: 'Total Limit', value: fmt(totalLimit), tone: COLOR.text },
-          { label: 'Active Exposure', value: fmt(activeExposure), tone: COLOR.warning },
-          { label: 'Available Wallet', value: fmt(walletBalance), tone: COLOR.success },
-        ].map((metric) => (
-          <div key={metric.label} className="card" style={{ marginBottom: 0 }}>
-            <p style={{ margin: '0 0 0.35rem', fontSize: '0.75rem', color: COLOR.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {metric.label}
-            </p>
-            <p style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: metric.tone }}>{metric.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <div>
-            <p style={{ margin: '0 0 0.25rem', color: COLOR.text, fontWeight: 600 }}>Portfolio View</p>
-            <p style={{ margin: 0, color: COLOR.muted, fontSize: '0.9rem' }}>
-              Sorted by {sortField} ({sortDirection}).
-            </p>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: COLOR.muted }}>
-            Status
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as CreditLineStatus | 'All')}
-              style={{ background: COLOR.surface, color: COLOR.text, border: `1px solid ${COLOR.border}`, borderRadius: 6, padding: '0.45rem 0.65rem' }}
-            >
-              <option value="All">All</option>
-              {statusOrder.map((status) => (
-                <option key={status} value={status}>{status}</option>
-              ))}
-            </select>
-          </label>
+      <div className="cl-filters">
+        <div className="cl-filter-group">
+          <label>Status</label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as CreditLineStatus | 'all')}>
+            <option value="all">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Suspended">Suspended</option>
+            <option value="Defaulted">Defaulted</option>
+            <option value="Closed">Closed</option>
+          </select>
         </div>
+        <div className="cl-filter-group">
+          <label>Sort By</label>
+          <select value={sortField} onChange={(e) => handleSort(e.target.value as SortField)}>
+            <option value="updatedAt">Last Updated</option>
+            <option value="status">Status</option>
+            <option value="limit">Credit Limit</option>
+            <option value="utilization">Utilization</option>
+            <option value="apr">APR</option>
+            <option value="riskScore">Risk Score</option>
+          </select>
+        </div>
+        <button
+          className="cl-sort-dir"
+          onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+        >
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </button>
       </div>
 
-      <div style={{ display: 'grid', gap: '0.75rem' }}>
-        {filteredLines.map((line) => {
-          const utilization = utilizationPct(line.utilized, line.limit);
-          const utilizationLevel = getUtilizationLevel(line.utilized, line.limit);
-          const statusTone = STATUS_COLOR[line.status];
-
-          return (
-            <div key={line.id} className="card" style={{ marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-                    <h2 style={{ margin: 0, color: COLOR.text, fontSize: '1.1rem' }}>{line.name}</h2>
-                    <span style={{ background: statusTone.bg, color: statusTone.color, padding: '0.2rem 0.55rem', borderRadius: 999, fontSize: '0.75rem', fontWeight: 600 }}>
-                      {line.status}
-                    </span>
-                    <span style={{ color: COLOR.muted, fontSize: '0.85rem' }}>{line.id}</span>
-                  </div>
-                  <p style={{ margin: 0, color: COLOR.muted, fontSize: '0.9rem' }}>
-                    Opened {fmtDate(line.openedAt)}. Last activity {fmtDateTime(line.updatedAt)}.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => handleSort('updatedAt')} style={btn.ghost}>Sort by Activity</button>
-                  <button type="button" onClick={() => handleSort('riskScore')} style={btn.ghost}>Sort by Risk</button>
-                  <button type="button" onClick={() => setSelectedLine(line)} style={btn.repay}>
-                    Repay
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-                <div>
-                  <p style={{ margin: '0 0 0.2rem', color: COLOR.muted, fontSize: '0.75rem', textTransform: 'uppercase' }}>Limit</p>
-                  <p style={{ margin: 0, color: COLOR.text, fontWeight: 700 }}>{fmt(line.limit)}</p>
-                </div>
-                <div>
-                  <p style={{ margin: '0 0 0.2rem', color: COLOR.muted, fontSize: '0.75rem', textTransform: 'uppercase' }}>Utilized</p>
-                  <p style={{ margin: 0, color: COLOR.text, fontWeight: 700 }}>{fmt(line.utilized)}</p>
-                </div>
-                <div>
-                  <p style={{ margin: '0 0 0.2rem', color: COLOR.muted, fontSize: '0.75rem', textTransform: 'uppercase' }}>APR</p>
-                  <p style={{ margin: 0, color: COLOR.text, fontWeight: 700 }}>{line.apr.toFixed(2)}%</p>
-                </div>
-                <div>
-                  <p style={{ margin: '0 0 0.2rem', color: COLOR.muted, fontSize: '0.75rem', textTransform: 'uppercase' }}>Risk Score</p>
-                  <p style={{ margin: 0, color: RISK_COLOR(line.riskScore), fontWeight: 700 }}>{line.riskScore}</p>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', color: COLOR.muted, fontSize: '0.85rem' }}>
-                  <span>Utilization</span>
-                  <span style={{ color: utilizationLevel === 'low' ? COLOR.success : utilizationLevel === 'medium' ? COLOR.warning : COLOR.danger }}>
-                    {utilization}%
-                  </span>
-                </div>
-                <div style={{ height: 10, background: COLOR.border, borderRadius: 999, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${Math.min(utilization, 100)}%`,
-                      height: '100%',
-                      background: utilizationLevel === 'low' ? COLOR.success : utilizationLevel === 'medium' ? COLOR.warning : COLOR.danger,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', color: COLOR.muted, fontSize: '0.85rem' }}>
-                <span>Collateral: {line.collateral || 'Unsecured'}</span>
-                <span>
-                  {line.nextPaymentDate && line.nextPaymentAmount
-                    ? `Next payment ${fmt(line.nextPaymentAmount)} on ${fmtDate(line.nextPaymentDate)}`
-                    : 'No scheduled payment'}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {selectedLine && (
-        <RepayModal
-          creditLine={selectedLine}
-          walletBalance={walletBalance}
-          onClose={() => setSelectedLine(null)}
-          onSuccess={handleRepaySuccess}
-        />
+      {filteredAndSorted.length === 0 ? (
+        <div className="cl-empty">
+          <div className="cl-empty-icon">💳</div>
+          <h3>No credit lines found</h3>
+          <p>Apply for a credit line to get started</p>
+          <Link to="/open-credit" className="cl-primary-btn">
+            Open Credit Line
+          </Link>
+        </div>
+      ) : (
+        <div className="cl-grid">
+          {filteredAndSorted.map(line => (
+            <CreditLineCard key={line.id} line={line} />
+          ))}
+        </div>
       )}
-    </>
+    </div>
   );
 }
