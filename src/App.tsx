@@ -29,8 +29,7 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/transactions" element={<TransactionHistory />} />
               <Route path="/draw-credit" element={<DrawCreditPage />} />
-
-              <Route path="/credit-lines" element={<CreditLines />} />
+             {/*<Route path="/login" element={<CreditLines />} />  causing error*/}
               <Route path="/open-credit" element={<RequestEvaluation />} />
             </Routes>
           </main>
