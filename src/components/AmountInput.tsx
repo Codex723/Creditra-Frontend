@@ -17,6 +17,9 @@ export function AmountInput({
 }: AmountInputProps) {
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
+  const inputId = "draw-amount-input";
+  const helperId = "draw-amount-helper";
+  const errorId = "draw-amount-error";
 
   useEffect(() => {
     const numAmount = parseFloat(amount) || 0;
@@ -38,6 +41,8 @@ export function AmountInput({
 
   const numAmount = parseFloat(amount) || 0;
   const isValid = numAmount > 0 && numAmount <= creditLine.available;
+  const hasNoAvailability = creditLine.available <= 0;
+  const describedBy = error ? `${helperId} ${errorId}` : helperId;
 
   return (
     <div className="space-y-8">
@@ -115,14 +120,14 @@ export function AmountInput({
       <div className="flex gap-3 pt-4">
         <button
           onClick={onBack}
-          className="flex-1 py-3 px-4 border-2 border-border text-foreground rounded-lg hover:bg-surface transition-colors font-semibold"
+          className="flex-1 py-3 px-4 border-2 border-border text-foreground rounded-lg hover:bg-surface transition-colors font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Back
         </button>
         <button
           onClick={() => onNext(numAmount)}
           disabled={!isValid}
-          className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/40 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/40 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Continue
         </button>
